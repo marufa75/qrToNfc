@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>NFC and QR Code Reader/Writer</title>
+</head>
+<body>
+  <label id="qrDataLabel"></label><br>
+  <button id="readQR">Scan QR Code</button>
+  <button id="writeNFC">Write to NFC</button>
+  <button id="readNFC">Read NFC</button>
+  <div id="logs"></div>
+  <button id="clearLogs">Clear Logs</button>
+  
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.0.0/build/jsQR.min.js"></script>
+  <script>
+    const logsContainer = document.getElementById('logs');
+    const clearLogsButton = document.getElementById('clearLogs');
+    const qrDataLabel = document.getElementById('qrDataLabel');
+
+    function writeToLogs(message) {
+      const logElement = document.createElement('p');
+      logElement.textContent = message;
+      logsContainer.appendChild(logElement);
+    }
+
+    clearLogsButton.addEventListener('click', () => {
+      logsContainer.innerHTML = '';
+    });
+
+    // Check for NFC availability
+    if ('NDEFReader' in window) {
+      const ndef = new NDEFReader();
+      
+      async function writeToNFC(value) {
+        try {
+          await ndef.write(value);
+          writeToLogs('Value written to NFC: ' + value);
+        } catch (error) {
+          writeToLogs('Error writing to NFC: ' + error);
+        }
+      }
+      
+      document.getElementById('writeNFC').addEventListener('click', async () => {
+        const value = qrDataLabel.innerText;
+        if (value) {
+          await writeToNFC(value);
+        } else {
+          writeToLogs('No QR code data available to write to NFC.');
+        }
+      });
+      
+      document.getElementById('readNFC').addEventListener('click', async () => {
+        try {
+          const scan = await ndef.scan();
+          writeToLogs('> Scan started');
+          
+          scan.addEventListener('readingerror', () => {
+            writeToLogs('Argh! Cannot read data from the NFC tag. Try another one?');
+          });
+          
+          scan.addEventListener('reading', ({ message, serialNumber }) => {
+            writeToLogs(`> Serial Number: ${serialNumber}`);
+            writeToLogs(`> Records: (${message.records.length})`);
+          });
+        } catch (error) {
+          writeToLogs('Error reading NFC: ' + error);
+        }
+      });
+    } else {
+      writeToLogs('NFC not supported on this device.');
+    }
+    
+    // QR code scanning functionality using jsQR
+    document.getElementById('readQR').addEventListener('click', async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        const video = document.createElement('video');
+        document.body.appendChild(video);
+        video.srcObject = stream;
+        video.setAttribute('playsinline', true);
+        await video.play();
+        
+        const canvasElement = document.createElement('canvas');
+        const canvas = canvasElement.getContext('2d');
+        canvasElement.width = video.videoWidth;
+        canvasElement.height = video.videoHeight;
+        
+        requestAnimationFrame(tick);
+        
+        function tick() {
+          canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+          const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          
+          if (code) {
+            writeToLogs('QR Code detected: ' + code.data);
+            qrDataLabel.innerText = code.data; // Update label with QR code data
+          }
+          
+          requestAnimationFrame(tick);
+        }
+      } catch (error) {
+        writeToLogs('Error accessing camera: ' + error);
+      }
+    });
+  </script>
+</body>
+</html>
